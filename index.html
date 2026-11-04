@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DebSoc Food Map: Vellore</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#16222B; --paper:#EEF1F4; --card:#FFFFFF; --line:#D5DBE1;
+  --teal:#0F5C5A; --saffron:#F4A300; --chili:#C8372D; --muted:#5C6B77;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Bricolage Grotesque",system-ui,sans-serif;color:var(--ink);background:var(--paper);font-size:15px;line-height:1.45}
+.app{display:grid;grid-template-columns:1fr 420px;height:100dvh}
+#map{height:100%;min-height:300px;z-index:1}
+.panel{background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.head{padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.head h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.head p{margin:4px 0 0;color:var(--muted);font-size:13.5px}
+.scroll{overflow-y:auto;flex:1;min-height:0}
+.tools{display:flex;gap:8px;padding:14px 20px}
+input,textarea,button{font:inherit}
+input,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,button:focus-visible,.item:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+textarea{resize:vertical;min-height:70px}
+.btn{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;background:var(--teal);color:#fff;white-space:nowrap}
+.btn.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.6;cursor:default}
+.list{list-style:none;margin:0;padding:0 8px 16px}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;border-radius:8px;cursor:pointer}
+.item:hover{background:var(--paper)}
+.item b{display:block;font-weight:700}
+.item small{color:var(--muted)}
+.count{min-width:30px;text-align:center;padding:3px 9px;border-radius:99px;background:var(--paper);font-weight:700;font-size:13px}
+.count.has{background:var(--saffron);color:var(--ink)}
+.detail{padding:16px 20px 24px}
+.back{background:none;border:0;color:var(--teal);font-weight:700;cursor:pointer;padding:0;margin-bottom:10px}
+.detail h2{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+.area{color:var(--muted);margin:2px 0 14px}
+.rec{border-left:4px solid var(--saffron);padding:6px 0 6px 12px;margin:0 0 14px}
+.rec .dish{font-weight:700;font-size:16px}
+.rec .note{margin:2px 0}
+.rec .by{color:var(--muted);font-size:12.5px}
+.empty{color:var(--muted);padding:10px 0 18px}
+form{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:16px;margin-top:6px}
+form h3{margin:0;font-size:16px}
+label{font-size:13px;font-weight:700;display:grid;gap:4px}
+.msg{font-size:13px;color:var(--chili);min-height:1em}
+.banner{background:#FFF4D6;border-bottom:1px solid #EBD79A;padding:8px 20px;font-size:12.5px}
+.pin{display:grid;place-items:center;width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--teal);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.pin span{transform:rotate(45deg);color:#fff;font-weight:800;font-size:13px}
+.pin.has{background:var(--saffron)}
+.pin.has span{color:var(--ink)}
+.pin.sel{background:var(--chili)}
+.pin.sel span{color:#fff}
+.placing #map{cursor:crosshair}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr;grid-template-rows:46dvh 1fr}
+  .panel{border-left:0;border-top:1px solid var(--line)}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div id="map" aria-label="Map of Vellore restaurants"></div>
+  <aside class="panel">
+    <div class="head">
+      <h1>Vellore food recs</h1>
+      <p>Pick a restaurant on the map, see what DebSoc orders, add your own.</p>
+    </div>
+    <div id="banner" class="banner" hidden>Demo mode: recs are saved only in this browser. Connect Supabase in index.html to share them across members.</div>
+    <div class="scroll" id="scroll"></div>
+  </aside>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ================= CONFIG ================= */
+const CONFIG = {
+  SUPABASE_URL: "",       // e.g. https://abcd1234.supabase.co
+  SUPABASE_ANON_KEY: ""   // anon public key
+};
+
+/* Coordinates are approximate. Fix any pin by editing lat/lng here. */
+const SEED = [
+  {id:"tara-maa", name:"Tara Maa", area:"Katpadi", lat:12.9705, lng:79.1385},
+  {id:"vellore-kitchen", name:"Vellore Kitchen", area:"Gandhi Road", lat:12.9190, lng:79.1330},
+  {id:"salt-and-pepper", name:"Salt and Pepper", area:"Officers Line", lat:12.9255, lng:79.1285},
+  {id:"alankar-virundhu", name:"Alankar Virundhu", area:"Sathuvachari", lat:12.9460, lng:79.1480},
+  {id:"anjappar", name:"Anjappar", area:"Katpadi Road", lat:12.9600, lng:79.1400},
+  {id:"dindigul-thalappakatti", name:"Dindigul Thalappakatti", area:"Bagayam", lat:12.9335, lng:79.1450},
+  {id:"saravana-bhavan", name:"Saravana Bhavan", area:"Gandhi Road", lat:12.9175, lng:79.1315},
+  {id:"ambur-star-biryani", name:"Ambur Star Biryani", area:"Gandhi Nagar", lat:12.9410, lng:79.1360},
+  {id:"vit-gate-eats", name:"VIT Gate Eateries", area:"Near VIT main gate", lat:12.9690, lng:79.1550}
+];
+/* =========================================== */
+
+const useDB = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+const LS_RECS="debsoc_recs_v1", LS_PLACES="debsoc_places_v1";
+const H = {apikey:CONFIG.SUPABASE_ANON_KEY, Authorization:"Bearer "+CONFIG.SUPABASE_ANON_KEY, "Content-Type":"application/json"};
+
+const store = {
+  async get(table){
+    if(useDB){
+      const r = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/${table}?select=*&order=created_at.desc`,{headers:H});
+      if(!r.ok) throw new Error("Could not load "+table);
+      return r.json();
+    }
+    return JSON.parse(localStorage.getItem(table==="recs"?LS_RECS:LS_PLACES)||"[]");
+  },
+  async add(table,row){
+    if(useDB){
+      const r = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/${table}`,{method:"POST",headers:{...H,Prefer:"return=representation"},body:JSON.stringify(row)});
+      if(!r.ok) throw new Error("Could not save. Try again.");
+      return (await r.json())[0];
+    }
+    const key = table==="recs"?LS_RECS:LS_PLACES;
+    const all = JSON.parse(localStorage.getItem(key)||"[]");
+    const saved = {...row,id:Date.now(),created_at:new Date().toISOString()};
+    all.unshift(saved);
+    localStorage.setItem(key,JSON.stringify(all));
+    return saved;
+  }
+};
+
+let places = [...SEED], recs = [], markers = {}, selected = null, placing = false, pendingLatLng = null, pendingMarker = null;
+
+const $ = s => document.querySelector(s);
+const scrollEl = $("#scroll");
+function el(tag, attrs={}, ...kids){
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){
+    if(k==="class") e.className=v; else if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else e.setAttribute(k,v);
+  }
+  kids.flat().forEach(c=>e.append(c instanceof Node?c:document.createTextNode(c)));
+  return e;
+}
+
+const map = L.map("map",{zoomControl:true}).setView([12.9450,79.1380],13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
+
+const recCount = id => recs.filter(r=>r.restaurant_id===String(id)).length;
+
+function pinIcon(p){
+  const n = recCount(p.id);
+  const cls = "pin"+(n?" has":"")+(selected===String(p.id)?" sel":"");
+  return L.divIcon({className:"",html:`<div class="${cls}"><span>${n}</span></div>`,iconSize:[34,34],iconAnchor:[17,34]});
+}
+function drawMarkers(){
+  places.forEach(p=>{
+    const id=String(p.id);
+    if(markers[id]){ markers[id].setIcon(pinIcon(p)); return; }
+    const m = L.marker([p.lat,p.lng],{icon:pinIcon(p),title:p.name,keyboard:true}).addTo(map);
+    m.on("click",()=>openPlace(id,false));
+    markers[id]=m;
+  });
+}
+
+function showList(filter=""){
+  selected=null; drawMarkers();
+  const q = filter.trim().toLowerCase();
+  const search = el("input",{type:"search",placeholder:"Search restaurants","aria-label":"Search restaurants",value:filter});
+  search.addEventListener("input",()=>showList(search.value));
+  const addBtn = el("button",{class:"btn alt",onclick:startPlacing},"Add a place");
+  const ul = el("ul",{class:"list"});
+  places.filter(p=>!q||(p.name+" "+(p.area||"")).toLowerCase().includes(q))
+    .sort((a,b)=>recCount(b.id)-recCount(a.id)||a.name.localeCompare(b.name))
+    .forEach(p=>{
+      const n=recCount(p.id);
+      const li = el("li",{class:"item",tabindex:"0",role:"button"},
+        el("div",{},el("b",{},p.name),el("small",{},p.area||"")),
+        el("span",{class:"count"+(n?" has":"")},n+(n===1?" rec":" recs")));
+      const go=()=>openPlace(String(p.id),true);
+      li.addEventListener("click",go);
+      li.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});
+      ul.append(li);
+    });
+  scrollEl.replaceChildren(el("div",{class:"tools"},search,addBtn),ul);
+  if(filter){ const s=scrollEl.querySelector("input"); s.focus(); s.setSelectionRange(filter.length,filter.length); }
+}
+
+function openPlace(id,fly){
+  const p = places.find(x=>String(x.id)===id); if(!p) return;
+  selected=id; drawMarkers();
+  if(fly) map.flyTo([p.lat,p.lng],Math.max(map.getZoom(),15),{duration:.6});
+  const list = recs.filter(r=>r.restaurant_id===id);
+  const box = el("div",{class:"detail"},
+    el("button",{class:"back",onclick:()=>showList()},"Back to all restaurants"),
+    el("h2",{},p.name), el("div",{class:"area"},p.area||""));
+  if(!list.length) box.append(el("div",{class:"empty"},"No recs yet. Add the first one below."));
+  list.forEach(r=>box.append(el("div",{class:"rec"},
+    el("div",{class:"dish"},r.dish),
+    r.note?el("div",{class:"note"},r.note):"",
+    el("div",{class:"by"},"by "+(r.author||"a DebSoc member")))));
+
+  const dish=el("input",{required:"",maxlength:"80",placeholder:"e.g. Chicken 65"});
+  const note=el("textarea",{maxlength:"300",placeholder:"Why it is good, price, what to avoid"});
+  const author=el("input",{maxlength:"40",placeholder:"Your name",value:localStorage.getItem("debsoc_name")||""});
+  const msg=el("div",{class:"msg",role:"status"});
+  const submit=el("button",{class:"btn",type:"submit"},"Add rec");
+  const form=el("form",{},el("h3",{},"Add a food rec"),
+    el("label",{},"Dish",dish),el("label",{},"Note",note),el("label",{},"Your name",author),msg,submit);
+  form.addEventListener("submit",async e=>{
+    e.preventDefault();
+    if(!dish.value.trim()){msg.textContent="Enter a dish name.";return;}
+    submit.disabled=true; msg.textContent="";
+    try{
+      localStorage.setItem("debsoc_name",author.value.trim());
+      const saved = await store.add("recs",{restaurant_id:id,dish:dish.value.trim(),note:note.value.trim(),author:author.value.trim()||"A DebSoc member"});
+      recs.unshift(saved); openPlace(id,false);
+    }catch(err){msg.textContent=err.message; submit.disabled=false;}
+  });
+  box.append(form);
+  scrollEl.replaceChildren(box); scrollEl.scrollTop=0;
+}
+
+function startPlacing(){
+  placing=true; $("#app").classList.add("placing");
+  const cancel=el("button",{class:"btn alt",onclick:stopPlacing},"Cancel");
+  scrollEl.replaceChildren(el("div",{class:"detail"},
+    el("h2",{},"Add a place"),
+    el("p",{class:"area"},"Click the map where the restaurant is."),cancel));
+}
+function stopPlacing(){
+  placing=false; $("#app").classList.remove("placing");
+  if(pendingMarker){map.removeLayer(pendingMarker);pendingMarker=null;}
+  showList();
+}
+map.on("click",e=>{
+  if(!placing) return;
+  pendingLatLng=e.latlng;
+  if(pendingMarker) map.removeLayer(pendingMarker);
+  pendingMarker=L.marker(e.latlng).addTo(map);
+  const name=el("input",{required:"",maxlength:"60",placeholder:"Restaurant name"});
+  const area=el("input",{maxlength:"60",placeholder:"Area, e.g. Katpadi"});
+  const msg=el("div",{class:"msg",role:"status"});
+  const save=el("button",{class:"btn",type:"submit"},"Save place");
+  const form=el("form",{},el("h3",{},"New place"),el("label",{},"Name",name),el("label",{},"Area",area),msg,save,
+    el("button",{class:"btn alt",type:"button",onclick:stopPlacing},"Cancel"));
+  form.addEventListener("submit",async ev=>{
+    ev.preventDefault();
+    if(!name.value.trim()){msg.textContent="Enter a name.";return;}
+    save.disabled=true;
+    try{
+      const row=await store.add("places",{name:name.value.trim(),area:area.value.trim(),lat:pendingLatLng.lat,lng:pendingLatLng.lng});
+      row.id="c-"+row.id; places.push(row);
+      stopPlacing(); drawMarkers(); openPlace(String(row.id),true);
+    }catch(err){msg.textContent=err.message;save.disabled=false;}
+  });
+  scrollEl.replaceChildren(el("div",{class:"detail"},form));
+});
+
+(async function init(){
+  if(!useDB) $("#banner").hidden=false;
+  try{
+    const [r,c]=await Promise.all([store.get("recs"),store.get("places")]);
+    recs=r.map(x=>({...x,restaurant_id:String(x.restaurant_id)}));
+    c.forEach(x=>places.push({...x,id:"c-"+x.id}));
+  }catch(e){
+    scrollEl.replaceChildren(el("div",{class:"detail"},el("div",{class:"msg"},e.message+". Reload to try again.")));
+  }
+  drawMarkers(); showList();
+})();
+</script>
+</body>
+</html>
