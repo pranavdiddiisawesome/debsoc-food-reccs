@@ -1,0 +1,42 @@
+{
+  "name": "debsoc-food-reccs",
+  "version": "1.0.0",
+  "description": "Static site. Deploy the folder on Netlify (drag and drop) or Vercel. No build step.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pranavdiddiisawesome/debsoc-food-reccs.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/pranavdiddiisawesome/debsoc-food-reccs/issues"
+  },
+  "homepage": "https://github.com/pranavdiddiisawesome/debsoc-food-reccs#readme",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^14.9.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.69.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/leaflet": "^1.9.22",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "tailwindcss": "^4.3.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
+  }
+}
